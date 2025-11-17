@@ -1,3 +1,4 @@
+
 import machine
 #from gpiozero import DigitalInputDevice
 import time
@@ -10,7 +11,9 @@ import select
 
 decisionList = ["l","s","r","s","s","s","s","s","s","s","s","s","s","s","s","s","r","s","l","s"] # left, right or straight
 listIndex = 0
+decisionSkipTime = 0
 end = False
+programOn = False
 
 class Motor:
     def __init__(self, dirPin, PWMPin):
@@ -49,7 +52,7 @@ def turnLeft(sensor0, sensor1, sensor2, sensor3, motorL, motorR):
     motorL.off()
     motorR.off()
     motorR.Forward(speed = 70)
-    time.sleep(0.5)
+    time.sleep(0.1)
     readings = read_sensors(sensor0, sensor1, sensor2, sensor3)
     while(readings[1] == 0 or readings[2] == 0):
         readings = read_sensors(sensor0, sensor1, sensor2, sensor3)
@@ -63,7 +66,7 @@ def turnRight(sensor0, sensor1, sensor2, sensor3, motorL, motorR):
     motorL.off()
     motorR.off()
     motorL.Forward(speed = 70)
-    time.sleep(0.5)
+    time.sleep(0.1)
     readings = read_sensors(sensor0, sensor1, sensor2, sensor3)
     while(readings[1] == 0 or readings[2] == 0):
         readings = read_sensors(sensor0, sensor1, sensor2, sensor3)
@@ -76,7 +79,7 @@ def turnDetector(sensorReadings):
     if(sensorReadings[0] == 1):
         #left branch detected
         output[0] = True
-    if(sensorReadings[1] == 1 and sensorReadings[2] == 1):
+    if(sensorReadings[1] == 1 or sensorReadings[2] == 1):
         #top branch detected
         output[1] = True
     if(sensorReadings[3] == 1):
@@ -98,7 +101,8 @@ def maintainPath(readings, motors):
 def turnDecision(branchProfile, sensor0, sensor1, sensor2, sensor3, motorL, motorR):
     global listIndex
     global end
-    straightTime = 0.16
+    global decisionSkipTime
+    straightTime = 8
     confirmationTime = 0.05
     if branchProfile == [False, True, False]:
         return
@@ -123,20 +127,18 @@ def turnDecision(branchProfile, sensor0, sensor1, sensor2, sensor3, motorL, moto
             return
 
     elif branchProfile == [True, True, True]:
-        time.sleep(straightTime)
+        decisionSkipTime = straightTime
         return
     time.sleep(confirmationTime)
     readings = read_sensors(sensor0, sensor1, sensor2, sensor3)
     updatedBranchProfile = turnDetector(readings)
     if branchProfile == [True, False, False]:
         if updatedBranchProfile == [True, False, False]:
-            print("Left turn only")
             turnLeft(sensor0, sensor1, sensor2, sensor3, motorL, motorR)
         return
 
     elif branchProfile == [False, False, True]:
         if updatedBranchProfile == [False, False, True]:
-            print("right turn only")
             turnRight(sensor0, sensor1, sensor2, sensor3, motorL, motorR)
         return
 
@@ -151,7 +153,7 @@ def turnDecision(branchProfile, sensor0, sensor1, sensor2, sensor3, motorL, moto
             elif decisionList[listIndex] == "s":
                 print("Going straight")
                 listIndex += 1
-                time.sleep(straightTime)
+                decisionSkipTime = straightTime
                 return
         return
 
@@ -166,7 +168,7 @@ def turnDecision(branchProfile, sensor0, sensor1, sensor2, sensor3, motorL, moto
             elif decisionList[listIndex] == "s":
                 print("Going straight")
                 listIndex += 1
-                time.sleep(straightTime)
+                decisionSkipTime = straightTime
                 return
         return
 
@@ -193,6 +195,9 @@ def key_pressed():
 
 def mainLoop(sensor0, sensor1, sensor2, sensor3, motorL, motorR):
     global listIndex
+    global decisionSkipTime
+    global programOn
+    
     try:
         while True:
             if(end == False):
@@ -204,11 +209,16 @@ def mainLoop(sensor0, sensor1, sensor2, sensor3, motorL, motorR):
                 motorR.Forward(speed = 60)          
                 if(readings[1] != readings[2]):
                     maintainPath(readings, motors)
-                else:
-                    branchProfile = turnDetector(readings)
-                    #print(branchProfile)
+                branchProfile = turnDetector(readings)
+                #print(branchProfile)
+                if(decisionSkipTime == 0):
                     turnDecision(branchProfile, sensor0, sensor1, sensor2, sensor3, motorL, motorR)
-                    #print("on path")
+                elif(decisionSkipTime > 0):
+                    print(decisionSkipTime)
+                    decisionSkipTime -= 1
+                else:
+                    decisionSkipTime = 0
+                #print("on path")
                 #print(readings, turnDetector(readings))
                     #print(listIndex)
                     
@@ -222,12 +232,43 @@ if __name__ == "__main__":
     sensor1 = setup_sensor(26) #purple
     sensor2 = setup_sensor(22) #gray
     sensor3 = setup_sensor(27) #brown
+    button = setup_sensor(20)
     motorL = setup_motor(4, 5)
     motorR = setup_motor(7, 6)
-    mainLoop(sensor0, sensor1, sensor2, sensor3, motorL, motorR)
+    pin1 = Pin(21, Pin.OUT)
+    pin1.value(0)
 
+    pin2 = Pin(20, Pin.OUT)
+    pin2.value(0)
 
-    
+    pin3 = Pin(19, Pin.OUT)
+    pin3.value(0)
 
+    pin4 = Pin(17, Pin.OUT)
+    pin4.value(0)
 
+    pin5 = Pin(16, Pin.OUT)
+    pin5.value(0)
 
+    pin6 = Pin(14, Pin.OUT)
+    pin6.value(0)
+
+    pin7 = Pin(13, Pin.OUT)
+    pin7.value(0)
+
+    pin8 = Pin(12, Pin.OUT)
+    pin8.value(0)
+
+    pin9 = Pin(11, Pin.OUT)
+    pin9.value(0)
+
+    pin10 = Pin(10, Pin.OUT)
+    pin10.value(0)
+
+    pin11 = Pin(9, Pin.OUT)
+    pin11.value(0)
+
+    pin12 = Pin(8, Pin.OUT)
+    pin12.value(0)
+
+    mainLoop(sensor0, sensor1, sensor2, sensor3, button, motorL, motorR)
