@@ -76,6 +76,16 @@ def turnRight(sensors, motors):
     return
 
 def turn180():
+    print("turning 180")
+    motors[0].Forward(speed = 60)
+    motors[1].Reverse(speed = 60)
+    time.sleep(1)
+    readings = read_sensors(sensors)
+    while(readings[1] == 0 or readings[2] == 0):
+        readings = read_sensors(sensors)
+        time.sleep(0.01)
+    motors[0].off()
+    motors[1].off()
     return
 
 def turnDetector(sensorReadings):
@@ -390,6 +400,7 @@ if __name__ == "__main__":
 
 
     
+
 
 
 
