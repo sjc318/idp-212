@@ -263,7 +263,7 @@ def key_pressed():
     dr, _, _ = select.select([sys.stdin], [], [], 0)
     return bool(dr)
 
-def mainLoop(sensors, button, motors):
+def mainLoop(sensors, button, motors, yellowLED):
     global decisionSkipTime
     global programOn
     global circuitPathIndex
@@ -293,6 +293,8 @@ def mainLoop(sensors, button, motors):
                             #print(listIndex)
                             
                         time.sleep(0.02)
+                    else:
+                        yellowLED.value(0)
 
                 elif(robotStatus == "pickupBox"):
                     if(frontDistance > maxDistance):
@@ -348,6 +350,7 @@ def mainLoop(sensors, button, motors):
                     time.sleep(0.02)
             else:
                 if(read_sensor(button) == 1):
+                    yellowLED.value(1)
                     programOn = True
     except KeyboardInterrupt:
         motors[0].off()
@@ -363,6 +366,10 @@ if __name__ == "__main__":
     motors = []
     motors.append(setup_motor(4, 5))
     motors.append(setup_motor(7, 6))
+    yellowLED = Pin(14, Pin.OUT)
+    yellowLED.value(0)
+
+    
     pin1 = Pin(21, Pin.OUT)
     pin1.value(0)
 
@@ -374,9 +381,6 @@ if __name__ == "__main__":
 
     pin5 = Pin(16, Pin.OUT)
     pin5.value(0)
-
-    pin6 = Pin(14, Pin.OUT)
-    pin6.value(0)
 
     pin7 = Pin(13, Pin.OUT)
     pin7.value(0)
@@ -396,10 +400,11 @@ if __name__ == "__main__":
     pin12 = Pin(8, Pin.OUT)
     pin12.value(0)
 
-    mainLoop(sensors, button, motors)
+    mainLoop(sensors, button, motors, yellowLED)
 
 
     
+
 
 
 
