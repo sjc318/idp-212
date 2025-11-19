@@ -114,8 +114,26 @@ def unloadBox():
 def bayPathCalculation(currentBoxColour, path, pathIndex):
     return
 
-def returnPathCalculation(path):
-    return
+def returnPathCalculation(Baypath):
+    returnPath = reversePath(Baypath[1:])
+
+    return returnPath
+    
+def reversePath(Path):
+    
+    reversed_path = Path[::-1]
+    result = []
+
+    for instruction in reversed_path:
+        if instruction == "l":
+            result.append("r")
+        elif instruction == "r":
+            result.append("l")
+        elif instruction in ("lc", "rc"):
+            result.append("s")
+        else:
+            result.append("s")
+    return result
         
 def turnDecision(branchProfile, sensors, motors, path, pathIndex):
     global end
@@ -351,6 +369,7 @@ if __name__ == "__main__":
 
 
     
+
 
 
 
