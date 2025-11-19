@@ -111,16 +111,7 @@ def grabBox():
 def unloadBox():
     return
 
-def bayPathCalculation(currentBoxColour, path, pathIndex):
-    return
-
-def returnPathCalculation(Baypath):
-    returnPath = reversePath(Baypath[1:])
-
-    return returnPath
-    
 def reversePath(Path):
-    
     reversed_path = Path[::-1]
     result = []
 
@@ -134,6 +125,36 @@ def reversePath(Path):
         else:
             result.append("s")
     return result
+
+def bayPathCalculation(currentBoxColour, path, pathIndex):
+    pathTaken = path[:pathIndex]
+    newPath = []
+    if(pathTaken[-1] == "rc"):
+        newPath.append("l")
+    elif(pathTaken[-1] == "lc"):
+        newPath.append("r")
+    else:
+        print("Not on a check branch")
+    #need to splice the front of the list so that it returns to the first branch before the bays
+    #this is currently excluding the first three indices
+    pathTaken = pathTaken[3:-1]
+    newPath += reversePath(pathTaken)
+    if(currentBoxColour == "red"):
+        newPath += ["l", "s", "s", "s", "r"]
+    elif(currentBoxColour == "blue"):
+        newPath += ["s"]
+    elif(currentBoxColour == "yellow"):
+        newPath += ["l", "s", "s", "r"]
+    elif(currentBoxColour == "green"):
+        newPath += ["l", "r"]
+    else:
+        print("Colour not recognised")
+    return newPath
+
+def returnPathCalculation(Baypath):
+    returnPath = reversePath(Baypath[1:])
+
+    return returnPath
         
 def turnDecision(branchProfile, sensors, motors, path, pathIndex):
     global end
@@ -369,6 +390,7 @@ if __name__ == "__main__":
 
 
     
+
 
 
 
