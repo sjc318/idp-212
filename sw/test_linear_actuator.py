@@ -23,7 +23,7 @@ def test_actuator1():
 
         print("Retracing slowly")
         actuator1.set(dir=1, speed=25)
-        sleep(10)  # nb we don't know when this has finished without another means
+        sleep(5)  # nb we don't know when this has finished without another means
 
 
 if __name__ == "__main__":
