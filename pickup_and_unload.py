@@ -344,6 +344,8 @@ def turnDecision(branchProfile, sensors, motors, acc, path, pathIndex, tofs):
     global boxCount
     global ignoreBranchOnBayReturn
     global bayPath
+    global circuitPath
+    global circuitPathIndex
     straightTime = 8
     confirmationTime = 0.06
     if(robotStatus == "returnToCircuit" and path[pathIndex] == "e"):
@@ -400,7 +402,7 @@ def turnDecision(branchProfile, sensors, motors, acc, path, pathIndex, tofs):
                 else:
                     returnPath = returnPathCalculation(bayPath)
             else:
-                bayPath = ["s", "s", "s", "s", "s", "s",] + bayPathCalculation(currentBoxColour)
+                bayPath = ["s", "s", "s", "s", "s", "s",] + bayPathCalculation(currentBoxColour, circuitPath, circuitPathIndex)
                 decisionSkipTime = straightTime
                 return 0
             print(returnPath)
@@ -532,8 +534,8 @@ def mainLoop(sensors, button, motors, acc, yellowLED):
                     #motors[0].off()
                     #motors[1].off()
                     if(robotStatus == "followCircuit"):
-                        motors[0].Forward(speed = 85)
-                        motors[1].Forward(speed = 85)          
+                        motors[0].Forward(speed = 75)
+                        motors[1].Forward(speed = 75)          
                         if(readings[1] != readings[2]):
                             maintainPath(readings, motors)
                         branchProfile = turnDetector(readings)
@@ -598,8 +600,8 @@ def mainLoop(sensors, button, motors, acc, yellowLED):
 
                     elif(robotStatus == "returnToCircuit"):
                         #print("returning")
-                        motors[0].Forward(speed = 85)
-                        motors[1].Forward(speed = 85)          
+                        motors[0].Forward(speed = 75)
+                        motors[1].Forward(speed = 75)          
                         if(readings[1] != readings[2]):
                             maintainPath(readings, motors)
                         branchProfile = turnDetector(readings)
