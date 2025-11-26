@@ -684,15 +684,6 @@ if __name__ == "__main__":
     yellowLED = Pin(14, Pin.OUT)
     yellowLED.value(0)
 
-    pin1 = Pin(21, Pin.OUT)
-    pin1.value(1)
-    time.sleep(2)
-    i2c_bus = SoftI2C(sda=Pin(8), scl=Pin(9))
-    tcs = tcs3472(i2c_bus)
-    c, r, g, b = fast_read_raw(i2c_bus)
-    pin1.value(0)
-    time.sleep(1)
-
     pin3 = Pin(19, Pin.OUT)
     pin3.value(0)
 
@@ -719,6 +710,14 @@ if __name__ == "__main__":
 
     pin12 = Pin(8, Pin.OUT)
     pin12.value(0)
+    
+    pin1 = Pin(21, Pin.OUT)
+    pin1.value(1)
+    time.sleep(2)
+    i2c_bus = SoftI2C(sda=Pin(8), scl=Pin(9))
+    tcs = tcs3472(i2c_bus)
+    c, r, g, b = fast_read_raw(i2c_bus)
+    pin1.value(0)
 
     mainLoop(sensors, button, motors, acc, yellowLED)
 
