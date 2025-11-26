@@ -16,7 +16,7 @@ rightPath = ("s", "s", "s", "s", "s", "s", "180", "rc", "rc", "rc", "rc", "rc", 
 
 currentPath = ["l", "s", "r"]
 currentPathIndex = 0
-maxBoxesPerSide = 4
+maxBoxesPerSide = 2
 
 leftBoxesUnloaded = 0
 rightBoxesUnloaded = 0
@@ -162,8 +162,13 @@ def reverseRight(sensors, motors):
     motors[0].off()
     motors[1].off()
 
-def turn180(sensors, motors, clockwise = False):
+def turn180(sensors, motors, clockwise = False, waitTime = 0):
     print("turning 180")
+    while(waitTime > 0):
+        waitTime -= 1
+        readings = read_sensors(sensors)
+        maintainPath(readings, motors)
+        time.sleep(0.02)
     if(clockwise):
         motors[0].Forward(speed = 70)
         motors[1].Reverse(speed = 70)  
@@ -228,6 +233,7 @@ def grabBox(acc):
     gp21 = Pin(21, Pin.OUT)  #turning LED on
     gp21.value(1)
     i2c_bus = SoftI2C(sda=Pin(8), scl=Pin(9))
+    time.sleep(0.1)
     tcs = tcs3472(i2c_bus)
     # MUST initialize the sensor
     r_sum = g_sum = b_sum = 0
@@ -238,7 +244,7 @@ def grabBox(acc):
         r_sum += r
         g_sum += g
         b_sum += b
-    #gp21.value(0)
+    gp21.value(0)
     total_rgb = r_sum + g_sum + b_sum
     print("done")
     if total_rgb == 0:
@@ -285,6 +291,8 @@ def unloadBox(acc, sensors, motors, colour):
         leftBoxesUnloaded+=1
     else:
         rightBoxesUnloaded+=1
+    print("box count")
+    print(leftBoxesUnloaded, rightBoxesUnloaded)
     motors[0].off()
     motors[1].off()
     while checkForAcc(acc, waitTime) == False:
@@ -320,6 +328,8 @@ def bayPathCalculation(colour, onLeft):
 def pathToNode(colour, leftBoxesUnloaded, rightBoxesUnloaded, maxBoxesPerSide):
     global onLeft
     path = []
+    print("box count")
+    print(leftBoxesUnloaded, rightBoxesUnloaded)
     if(colour in ("green", "blue") and leftBoxesUnloaded < maxBoxesPerSide):
         if(colour == "red"):
             path += ["l", "s", "s", "s", "r"]
@@ -390,13 +400,14 @@ def checkForAcc(acc, timeToStop):
         return True
     return False
 
-def turnDecision(branchProfile, sensors, motors, acc, path, pathIndex, tofs, leftBoxesUnloaded, rightBoxesUnloaded, maxBoxesPerSide, onLeft):
+def turnDecision(branchProfile, sensors, motors, acc, path, pathIndex, tofs):
     global end
     global decisionSkipTime
     global robotStatus
     global currentBoxColour
     global ignoreBranchOnBayReturn
     global currentPath
+    global leftBoxesUnloaded, rightBoxesUnloaded, maxBoxesPerSide, onLeft
 
     straightTime = 8
     confirmationTime = 0.06
@@ -444,8 +455,7 @@ def turnDecision(branchProfile, sensors, motors, acc, path, pathIndex, tofs, lef
             currentPath = ["s", "s", "s", "s", "s", "s"] + bayPathCalculation(currentBoxColour, onLeft)
             return pathIndex
         elif(path[pathIndex] == "180"):
-            time.sleep(1)
-            turn180(sensors, motors)
+            turn180(sensors, motors, waitTime = 50)
             decisionSkipTime = straightTime
             return pathIndex + 1
         decisionSkipTime = straightTime
@@ -577,9 +587,9 @@ def mainLoop(sensors, button, motors, acc, yellowLED):
                         branchProfile = turnDetector(readings)
                         if(decisionSkipTime == 0):
                             if(onLeft):
-                                currentPathIndex = turnDecision(branchProfile, sensors, motors, acc, leftPath, currentPathIndex, tofs, leftBoxesUnloaded, rightBoxesUnloaded, maxBoxesPerSide, True)
+                                currentPathIndex = turnDecision(branchProfile, sensors, motors, acc, leftPath, currentPathIndex, tofs)
                             else:
-                                currentPathIndex = turnDecision(branchProfile, sensors, motors, acc, rightPath, currentPathIndex, tofs, leftBoxesUnloaded, rightBoxesUnloaded, maxBoxesPerSide, False)
+                                currentPathIndex = turnDecision(branchProfile, sensors, motors, acc, rightPath, currentPathIndex, tofs)
                         elif(decisionSkipTime > 0):
                             #print(decisionSkipTime)
                             decisionSkipTime -= 1
@@ -609,12 +619,12 @@ def mainLoop(sensors, button, motors, acc, yellowLED):
                             robotStatus = "goToBay"
                             currentPath = bayPathCalculation(currentBoxColour, onLeft)
                             currentPathIndex = 0
-                            ignoreBranchOnBayReturn = 250
+                            ignoreBranchOnBayReturn = 200
                         time.sleep(0.02)
                 
                     elif(robotStatus == "goToBay"):
-                        motors[0].Forward(speed = 70)
-                        motors[1].Forward(speed = 70)
+                        motors[0].Forward(speed = 85)
+                        motors[1].Forward(speed = 85)
                         if(readings[1] != readings[2]):
                             maintainPath(readings, motors)
                         branchProfile = turnDetector(readings)
@@ -623,7 +633,7 @@ def mainLoop(sensors, button, motors, acc, yellowLED):
                             ignoreBranchOnBayReturn -= 1
                             print(ignoreBranchOnBayReturn)
                         if(decisionSkipTime == 0):
-                            currentPathIndex = turnDecision(branchProfile, sensors, motors, acc, currentPath, currentPathIndex, tofs, leftBoxesUnloaded, rightBoxesUnloaded, maxBoxesPerSide, onLeft)
+                            currentPathIndex = turnDecision(branchProfile, sensors, motors, acc, currentPath, currentPathIndex, tofs)
                         elif(decisionSkipTime > 0):
                             print(decisionSkipTime)
                             decisionSkipTime -= 1
@@ -640,7 +650,7 @@ def mainLoop(sensors, button, motors, acc, yellowLED):
                         branchProfile = turnDetector(readings)
                         #print(branchProfile)
                         if(decisionSkipTime == 0):
-                            currentPathIndex = turnDecision(branchProfile, sensors, motors, acc, currentPath, currentPathIndex, tofs, leftBoxesUnloaded, rightBoxesUnloaded, maxBoxesPerSide, onLeft)
+                            currentPathIndex = turnDecision(branchProfile, sensors, motors, acc, currentPath, currentPathIndex, tofs)
                             if(currentPathIndex == len(currentPath)):
                                 currentPathIndex = 0
                                 timeToStopAcc = setAccSpeed(acc, "datum", "intermediate", 3)
@@ -675,6 +685,12 @@ if __name__ == "__main__":
     yellowLED.value(0)
 
     pin1 = Pin(21, Pin.OUT)
+    pin1.value(1)
+    i2c_bus = SoftI2C(sda=Pin(8), scl=Pin(9))
+    time.sleep(0.5)
+    tcs = tcs3472(i2c_bus)
+    c, r, g, b = fast_read_raw(i2c_bus)
+    sleep(0.5)
     pin1.value(0)
 
     pin3 = Pin(19, Pin.OUT)
