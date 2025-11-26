@@ -369,14 +369,14 @@ def setAccSpeed(acc, currentPos, desiredPos, desiredTime):
     elif(currentPos == "intermediate"):
         numPos0 = 180
     elif(currentPos == "unloadPos"):
-        numPos0 = 550
+        numPos0 = 560
     numPos1 = 0
     if(desiredPos == "datum"):
         numPos1 = -10
     elif(desiredPos == "intermediate"):
         numPos1 = 180
     elif(desiredPos == "unloadPos"):
-        numPos1 = 550
+        numPos1 = 560
     posChange = numPos1 - numPos0
     speedRequired = posChange / desiredTime
     outputTime = desiredTime
@@ -580,8 +580,8 @@ def mainLoop(sensors, button, motors, acc, yellowLED):
                     #motors[0].off()
                     #motors[1].off()
                     if(robotStatus == "followCircuit"):
-                        motors[0].Forward(speed = 75)
-                        motors[1].Forward(speed = 75)          
+                        motors[0].Forward(speed = 85)
+                        motors[1].Forward(speed = 85)          
                         if(readings[1] != readings[2]):
                             maintainPath(readings, motors)
                         branchProfile = turnDetector(readings)
@@ -643,8 +643,8 @@ def mainLoop(sensors, button, motors, acc, yellowLED):
 
                     elif(robotStatus == "returnToNode"):
                         #print("returning")
-                        motors[0].Forward(speed = 75)
-                        motors[1].Forward(speed = 75)          
+                        motors[0].Forward(speed = 85)
+                        motors[1].Forward(speed = 85)          
                         if(readings[1] != readings[2]):
                             maintainPath(readings, motors)
                         branchProfile = turnDetector(readings)
@@ -713,10 +713,10 @@ if __name__ == "__main__":
     
     pin1 = Pin(21, Pin.OUT)
     pin1.value(1)
-    time.sleep(2)
     i2c_bus = SoftI2C(sda=Pin(8), scl=Pin(9))
+    time.sleep(0.5)
     tcs = tcs3472(i2c_bus)
-    c, r, g, b = fast_read_raw(i2c_bus)
+    time.sleep(0.5)
     pin1.value(0)
 
     mainLoop(sensors, button, motors, acc, yellowLED)
