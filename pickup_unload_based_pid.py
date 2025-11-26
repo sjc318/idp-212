@@ -6,21 +6,13 @@ import random
 from machine import Pin, PWM, I2C, SoftI2C
 from libs.tcs3472_micropython.tcs3472 import tcs3472
 from utime import sleep
-import sysimport machine
-#from gpiozero import DigitalInputDevice
-import time
-import random
-#from turn_detector.py import turnDetector
-from machine import Pin, PWM, I2C, SoftI2C
-from libs.tcs3472_micropython.tcs3472 import tcs3472
-from utime import sleep
 import sys
 import select
 
 from libs.DFRobot_TMF8x01.DFRobot_TMF8x01 import DFRobot_TMF8701
 from libs.VL53L0X.VL53L0X import VL53L0X
 
-circuitPath = ["l","s","r","rc","rc","rc","rc","rc","rc","rc","rc","rc","rc","s","s","s","r","s","l","s"] # left, right or straight
+circuitPath = ["l","s","r","rc","rc","rc","rc","rc","rc","s","rc","rc","rc","rc","rc","rc","r","s","l","s"] # left, right or straight
 circuitPathIndex = 0
 bayPath = []
 bayPathIndex = 0
@@ -29,6 +21,7 @@ returnPathIndex = 0
 robotStatus = "followCircuit"
 #robotStatus = "returnToCircuit"
 decisionSkipTime = 0
+ignoreBranchOnBayReturn = 0
 end = False
 programOn = False
 TOFLList = []
@@ -38,18 +31,11 @@ count = 0
 frontDistance = 200
 currentBoxColour = ""
 boxCount = 0
-# pid parameters below, to be tuned
-_SENSOR_WEIGHTS = [-3.5, -1, 1, 3.5]  # weights for left to right sensors based on position
-pid = PID(Kp=25.0, Ki=0.0, Kd=0.0, output_limits=(-100, 100), integral_limit=100)
-'''
-1. set ki = 0, kd = 0, increase kp until oscillations start, then reduce kp to about half that value
-2. increase kd until oscillations damp quickly
-3. increase ki slowly to eliminate steady-state error start from 0.1
-4. lower base_speed while tuning
-'''
-last_error = 0.0
 
-
+# below are parameters for proportional control, to be tuned
+kp = 0.5
+alpha = 1.0
+last_error = 0
 
 class Actuator:
     def __init__(self, dirPin, PWMPin):
@@ -79,52 +65,7 @@ class Motor:
     def Reverse(self, speed=30):
         self.mDir.value(1)
         self.pwm.duty_u16(int(65535 * speed / 100))
-
-class PID:
-    def __init__(self, Kp, Ki, Kd, output_limits=(None, None), integral_limit=None):
-        self.Kp = Kp
-        self.Ki = Ki
-        self.Kd = Kd
-        self.min_out, self.max_out = output_limits
-        self.int_limit = integral_limit
-
-        self.previous_error = 0.0
-        self.integral = 0.0
-        self.last_time = None
-
-    def reset(self):
-        self.previous_error = 0.0
-        self.integral = 0.0
-        self.last_time = None
-
-    def compute(self, ref, measure):
-        now = time.ticks_ms() / 1000.0  # current time in seconds
-        error = ref - measure
-
-        if self.last_time is None:
-            dt = 0.02 # tbd
-        else:
-            dt = now - self.last_time
-            if dt <= 0.0:
-                dt = 0.001
         
-        self.integral += error * dt
-        if self.int_limit is not None:
-            self.integral = max(min(self.integral, self.int_limit), -self.int_limit)
-        
-        derivative = (error - self.previous_error) / dt
-        output = (self.Kp * error) + (self.Ki * self.integral) + (self.Kd * derivative)
-
-        if self.max_out is not None:
-            output = min(output, self.max_out)
-        if self.min_out is not None:
-            output = max(output, self.min_out)
-        
-        self.previous_error = error
-        self.last_time = now
-
-        return output
-
 def setup_actuator(dPin, pPin):
     acc = Actuator(dPin, pPin)
     return acc
@@ -165,7 +106,7 @@ def turnLeft(sensors, motors):
     motors[1].off()
     motors[0].Reverse(speed = 50)
     motors[1].Forward(speed = 70)
-    time.sleep(0.4)
+    time.sleep(0.3)
     motors[0].off()
     readings = read_sensors(sensors)
     while(readings[1] == 0 or readings[2] == 0):
@@ -174,6 +115,7 @@ def turnLeft(sensors, motors):
     motors[1].off()
     return
     
+
 def turnRight(sensors, motors):
     print("turning right")
     motors[0].off()
@@ -215,6 +157,7 @@ def reverseLeft(sensors, motors):
     motors[0].off()
     motors[1].off()
     
+
 def turn180(sensors, motors, clockwise = False):
     print("turning 180")
     motors[1].Reverse(speed = 70)
@@ -251,11 +194,11 @@ def maintainPath(readings, motors, reverse = False):
     if(reverse==False):
         if(readings[1] == False):
             motors[0].off()
-            motors[0].Forward(speed = 85)
+            motors[0].Forward(speed = 100)
             #print("motorL speed increased")
         else:
             motors[1].off()
-            motors[1].Forward(speed = 85)
+            motors[1].Forward(speed = 100)
             #print("motorR speed increased")
     else:
         if(readings[1] == False):
@@ -265,48 +208,29 @@ def maintainPath(readings, motors, reverse = False):
             motors[1].off()
             motors[1].Reverse(speed = 80)
 
-def maintainPathPID(readings, motors, reverse = False):
-    global last_error
+def maintain_pathPID(readings, motors, reverse = False, base_speed=70):
+    global last_error, kp, alpha
 
-    active = [1 if (not r) else 0 for r in readings]
+    weights = [-36, -7.5, 7.5, 36] # based on sensor positions
+    current_error = 0
+    for i in range(len(readings)):
+        current_error += weights[i] * readings[i]
+    
+    filtered_error = alpha * current_error + (1 - alpha) * last_error
+    last_error = filtered_error
 
-    sum = 0.0
-    active_count = 0
-    for w, a in zip(_SENSOR_WEIGHTS, active):
-        sum += w * a
-        active_count += a
-    
-    if active_count > 0:
-        error = sum / active_count
-        last_error = error
-    else:
-        error = last_error
-        base_speed = max(50, base_speed - 20)
-    
-    correction = pid.compute(0.0, error)
-
-    if reverse:
-        correction = -correction
-    
-    left_speed = base_speed - correction
-    right_speed = base_speed + correction
-
-    def clamp(x, min=0, max=100):
-        return max(min(x, max), min)
-    
-    left_speed = clamp(left_speed)
-    right_speed = clamp(right_speed)
+    correction = kp * filtered_error
 
     if not reverse:
-        motors[0].off()
-        motors[0].Forward(speed = left_speed)
-        motors[1].off()
-        motors[1].Forward(speed = right_speed)
+        left_speed = max(0, min(100, base_speed + correction))
+        right_speed = max(0, min(100, base_speed - correction))
+        motors[0].Forward(speed=left_speed)
+        motors[1].Forward(speed=right_speed)
     else:
-        motors[0].off()
-        motors[0].Reverse(speed = left_speed)
-        motors[1].off()
-        motors[1].Reverse(speed = right_speed)
+        left_speed = max(0, min(100, base_speed - correction))
+        right_speed = max(0, min(100, base_speed + correction))
+        motors[0].Reverse(speed=left_speed)
+        motors[1].Reverse(speed=right_speed)
 
 def checkForBox(isLeft, tofs):
     d = readTOF(tofs)
@@ -401,11 +325,11 @@ def reversePath(Path):
 def bayPathCalculation(currentBoxColour, path, pathIndex):
     pathTaken = path[:pathIndex]
     newPath = []
-    newPath.append("s")
+    #newPath.append("s")
     #need to splice the front of the list so that it returns to the first branch before the bays
     #this is currently excluding the first three indices
-    pathTaken = pathTaken[3:-1]
-    newPath += reversePath(pathTaken)
+    #pathTaken = pathTaken[3:-1]
+    #newPath += reversePath(pathTaken)
     if(currentBoxColour == "red"):
         newPath += ["l", "s", "s", "s", "r"]
     elif(currentBoxColour == "blue"):
@@ -433,8 +357,8 @@ def homePathCalculation(colour):
     elif(colour == "yellow"):
         path = ["l", "l"]
     elif(colour == "red"):
-        path = ["l", "r", "l"]
-    path.append("s")
+        path = ["l", "s", "l"]
+    path.append("e")
     return path
 
         
@@ -445,8 +369,22 @@ def turnDecision(branchProfile, sensors, motors, acc, path, pathIndex, tofs):
     global returnPath
     global returnPathIndex
     global currentBoxColour
+    global boxCount
+    global ignoreBranchOnBayReturn
+    global bayPath
+    global circuitPath
+    global circuitPathIndex
     straightTime = 8
     confirmationTime = 0.06
+    if(robotStatus == "returnToCircuit" and path[pathIndex] == "e"):
+                motors[0].Forward(speed = 70)
+                motors[1].Forward(speed = 70)
+                acc.set(dir = 1, speed=100)
+                time.sleep(2)
+                motors[0].off()
+                motors[1].off()
+                acc.set(dir = 0, speed=0)
+                end = True
     if branchProfile == [False, True, False]:
         return pathIndex
     elif branchProfile == [False, False, False]:
@@ -461,14 +399,7 @@ def turnDecision(branchProfile, sensors, motors, acc, path, pathIndex, tofs):
             turnLeft(sensors, motors)
             return pathIndex + 1
         elif path[pathIndex] == "s":
-            if(robotStatus == "returnToCircuit"):
-                motors[0].Forward(speed = 70)
-                motors[1].Forward(speed = 70)
-                time.sleep(1)
-                motors[0].off()
-                motors[1].off()
-                end = True
-            elif(robotStatus == "goToBay" and pathIndex == len(path) - 1):
+            if(robotStatus == "goToBay" and pathIndex == len(path) - 1):
                 motors[0].off()
                 motors[1].off()
                 unloadBox(acc, sensors, motors, currentBoxColour)
@@ -479,24 +410,29 @@ def turnDecision(branchProfile, sensors, motors, acc, path, pathIndex, tofs):
                     returnPath = homePathCalculation(currentBoxColour)
                 else:
                     returnPath = returnPathCalculation(bayPath)
-                print(returnPath) 
+                print(returnPath)
             return pathIndex
         else:
             return pathIndex
 
     elif branchProfile == [True, True, True]:
-        if(robotStatus == "goToBay" and pathIndex == len(path) - 1):
-            motors[0].off()
-            motors[1].off()
-            unloadBox(acc, sensors, motors, currentBoxColour)
-            boxCount += 1
-            robotStatus = "returnToCircuit"
-            returnPathIndex = 0
-            if(boxCount == 4):
-                #return home
-                returnPath = homePathCalculation(currentBoxColour)
+        if(robotStatus == "goToBay"):
+            if(pathIndex == len(path) - 1):
+                motors[0].off()
+                motors[1].off()
+                unloadBox(acc, sensors, motors, currentBoxColour)
+                boxCount += 1
+                robotStatus = "returnToCircuit"
+                returnPathIndex = 0
+                if(boxCount == 4):
+                    #return home
+                    returnPath = homePathCalculation(currentBoxColour)
+                else:
+                    returnPath = returnPathCalculation(bayPath)
             else:
-                returnPath = returnPathCalculation(bayPath)
+                bayPath = ["s", "s", "s", "s", "s", "s",] + bayPathCalculation(currentBoxColour, circuitPath, circuitPathIndex)
+                decisionSkipTime = straightTime
+                return 0
             print(returnPath)
             return pathIndex
         decisionSkipTime = straightTime
@@ -504,7 +440,6 @@ def turnDecision(branchProfile, sensors, motors, acc, path, pathIndex, tofs):
         print(TOFRList)
         print(branchList)
         return pathIndex
-    
     time.sleep(confirmationTime)
     readings = read_sensors(sensors)
     updatedBranchProfile = turnDetector(readings)
@@ -519,6 +454,8 @@ def turnDecision(branchProfile, sensors, motors, acc, path, pathIndex, tofs):
         return pathIndex
 
     elif branchProfile == [True, True, False]:
+        if(ignoreBranchOnBayReturn > 0):
+            return pathIndex
         if updatedBranchProfile == [True, True, False]:
             print("Left branch")
             print(pathIndex, path[pathIndex])
@@ -539,6 +476,8 @@ def turnDecision(branchProfile, sensors, motors, acc, path, pathIndex, tofs):
         return pathIndex
 
     elif branchProfile == [False, True, True]:
+        if(ignoreBranchOnBayReturn > 0):
+            return pathIndex
         if updatedBranchProfile == [False, True, True]:
             print("Right branch")
             print(pathIndex, path[pathIndex])
@@ -589,6 +528,7 @@ def mainLoop(sensors, button, motors, acc, yellowLED):
     global returnPath
     global returnPathIndex
     global currentBoxColour
+    global ignoreBranchOnBayReturn
     i2c_busL = I2C(1, sda=Pin(10), scl=Pin(11), freq = 100000)  # I2C0 on GP8 & GP9
     i2c_busR = I2C(0, sda=Pin(12), scl=Pin(13), freq = 100000)
     
@@ -622,8 +562,8 @@ def mainLoop(sensors, button, motors, acc, yellowLED):
                     #motors[0].off()
                     #motors[1].off()
                     if(robotStatus == "followCircuit"):
-                        motors[0].Forward(speed = 70)
-                        motors[1].Forward(speed = 70)          
+                        motors[0].Forward(speed = 75)
+                        motors[1].Forward(speed = 75)          
                         if(readings[1] != readings[2]):
                             maintainPath(readings, motors)
                         branchProfile = turnDetector(readings)
@@ -663,6 +603,8 @@ def mainLoop(sensors, button, motors, acc, yellowLED):
                             robotStatus = "goToBay"
                             bayPathIndex = 0
                             bayPath = bayPathCalculation(currentBoxColour, circuitPath, circuitPathIndex)
+                            print(bayPath)
+                            ignoreBranchOnBayReturn = 250
                         time.sleep(0.02)
                 
                     elif(robotStatus == "goToBay"):
@@ -672,6 +614,9 @@ def mainLoop(sensors, button, motors, acc, yellowLED):
                             maintainPath(readings, motors)
                         branchProfile = turnDetector(readings)
                         #print(branchProfile)
+                        if(ignoreBranchOnBayReturn > 0):
+                            ignoreBranchOnBayReturn -= 1
+                            print(ignoreBranchOnBayReturn)
                         if(decisionSkipTime == 0):
                             bayPathIndex = turnDecision(branchProfile, sensors, motors, acc, bayPath, bayPathIndex, tofs)
                         elif(decisionSkipTime > 0):
@@ -683,8 +628,8 @@ def mainLoop(sensors, button, motors, acc, yellowLED):
 
                     elif(robotStatus == "returnToCircuit"):
                         #print("returning")
-                        motors[0].Forward(speed = 70)
-                        motors[1].Forward(speed = 70)          
+                        motors[0].Forward(speed = 75)
+                        motors[1].Forward(speed = 75)          
                         if(readings[1] != readings[2]):
                             maintainPath(readings, motors)
                         branchProfile = turnDetector(readings)
